@@ -1,0 +1,259 @@
+// sets the marker property to 'delete' on first document with distance = 950
+db.flightData.updateOne({distance: 950}, {$set: {marker: "delete"}})
+
+// sets the marker property to 'toDelete' on all documents (no filter)
+db.flightData.updateMany({}, {$set: {marker: "toDelete"}})
+
+db.flightData.deleteMany({marker: "toDelete"})
+
+db.flightData.insertMany([
+  {
+    "departureAirport": "MUC",
+    "arrivalAirport": "SFO",
+    "aircraft": "Airbus A380",
+    "distance": 12000,
+    "intercontinental": true
+  },
+  {
+    "departureAirport": "LHR",
+    "arrivalAirport": "TXL",
+    "aircraft": "Airbus A320",
+    "distance": 950,
+    "intercontinental": false
+  }
+])
+
+db.flightData.find({intercontinental: true})
+
+// finds flight with distance greater than
+db.flightData.find({distance: {$gt: 10000}})
+
+db.flightData.updateOne({_id: ObjectId("63fc55f27234ffdc4a27849c")}, {$set: {delayed: true}})
+
+// !! .find() method returns a cursor (object with metadata that allows us to cycle through the results)
+// !! this is a feature so that when we handle large collections, we can use the 'it' command to see more results
+
+// returns ALL the contents of the passengers collections as an array
+db.passengers.find().toArray()
+
+// Projection: technique used to extract only some properties of an object
+// this command will only extract the passenger name, and will ommit their age
+db.passengers.find({}, {name: 1})
+
+// update of a property as nested document
+db.flightData.updateMany({}, {$set: {status: {description: "on-time", lastUpdated: "1 hour ago"}}})
+
+// find by nested property
+db.passengers.find({hobbies: "sports"})
+db.flightData.find({"status.description": "on-time"})
+
+// merging related documents related by reference approach with $lookup
+db.books.aggregate([{$lookup: {from: "authors", localField: "authors", foreignField: "_id", as: "creators"}}])
+
+// Ordered inserts
+// Before executing this operation, I already have a document with id 'cooking'
+// The default behaviour is to insert them oredered, yoga successfully, cooking fails and the insert operation stops without rolling back
+db.hobbies.insertMany([{_id: "yoga", name: "yoga"}, {_id: "cooking", name: "cooking"}, {_id: "hiking", name: "hiking"}])
+
+// This behaviour can be overriden by passig an additional parameter, therefore it will continue inserting even though some entries fail
+db.hobbies.insertMany([{_id: "yoga", name: "yoga"}, {_id: "cooking", name: "cooking"}, {_id: "hiking", name: "hiking"}], {ordered: false})
+
+// Import document array from a json file
+// -d specifies database name
+// -c specifies collection name
+// --jsonArray warns mongoimport that we are willing to import an array of documents, not only one document
+// --drop used to drop the existing collection if present
+mongoimport tv-shows.json -d movieData -c movies --jsonArray --drop
+
+// Comparison operators
+db.movies.find({runtime: {$lt: 40}})
+
+db.movies.find({runtime: {$in: [30, 42]}})
+db.movies.find({runtime: {$nin: [30, 42]}})
+
+db.movies.find({$or: [{"rating.average": {$lt: 5}}, {"rating.average": {$gt: 9.3}}]})
+db.movies.find({$and: [{"rating.average": {$gt: 9}}, {"genres": "Drama"}]})
+
+db.users.find({age: {$exists: true}})
+db.users.find({age: {$exists: true, $ne: null}})
+db.users.find({phone: {$type: "string"}})
+
+// filter sales that have volume gt target
+db.sales.find({$expr: {$gt: ["$volume", "$target"]}})
+
+db.sales.find({$expr: {$gt: [{$cond: {if: {$gte: ["$volume", 190]}, then: {$subtract: ["$volume", 30]}, else: "$volume"}}, "$target"]}})
+
+// arrays operators
+db.users.find({"hobbies": {$not: {$size: 3}}})
+
+// search all users with hobbies that contain 'Cooking' and 'Sports'
+db.users.find({"hobbies.title": {$all: ["Cooking", "Sports"]}})
+
+// search all users that have "Sports" as a hobby and a frequency gte 3 for "Sports"
+db.users.find({hobbies: {$elemMatch: {title: "Sports", frequency: {$gte: 3}}}})
+
+// sorting: -1 DSC, 1 ASC
+db.movies.find().sort({"rating.average": -1})
+
+// use Projection to extract certain properties of documents
+db.movies.find({}, {name: 1, genres: 1, runtime: 1, rating: 1})
+
+// increment age by 1
+db.users.updateOne({name: "Manuel"}, {$inc: {age: 1}})
+
+// updates the age for Chris to the min value between current age and 30
+db.users.updateOne({name: "Chris"}, {$min: {age: 30}})
+
+// removes a field from a document
+db.users.updateMany({isSporty: true}, {$unset: {phone: ""}})
+
+// rename a field
+db.users.updateMany({}, {$rename: {age: "totalAge"}})
+
+// Upsert: if a record with name "Maria" was found, it will be update, otherwise it will insert a new document with specified details
+db.users.updateOne({name: "Maria"}, {$set: {age: 29, hobbies: [{title: "Good food", frequency: 3, isSporty: true}]}}, {upsert: true})
+
+// Hobbies is an array of documents embedded for each user. Sets the "highFrequency" attribute of the "Sports" with "frequency" >= 3 hobby entry.
+// hobbies.$ is used for accessing the matching hobby by conditions and modify it's properties.
+db.users.updateMany({hobbies: {$elemMatch: {title: "Sports", frequency: {$gte: 3}}}}, {$set: {"hobbies.$.highFrequency": true}})
+
+// decreases by 1 the frequency of ALL hobbies for persons older than 30
+// $[] is used for looping on all hobbiy elements and decrement their frequency
+db.users.updateMany({"totalAge": {$gt: 30}}, {$inc: {"hobbies.$[].frequency": -1}})
+
+// find users with at least one hobby having a frequency > 2. Fir those users, iterate on their hobbies array and for ones with frequency > 2
+// set the "goodFrequency" to true
+db.users.updateMany({"hobbies.frequency": {$gt: 2}}, {$set: {"hobbies.$[el].goodFrequency": true}}, {arrayFilters: [{"el.frequency": {$gt: 2}}]})
+
+// adds a new hobby for "Maria"
+db.users.updateOne({name: "Maria"}, {$push: {hobbies: {title: "Sports", frequency: 2}}})
+
+// adds multiple hoobies for "Maria"
+db.users.updateOne({name: "Maria"}, {$push: {hobbies: {$each: [{title: "Good Wine", frequency: 1}, {title: "Hiking", frequency: 2}]}}})
+
+// remove a hobby for "Maria"
+db.users.updateOne({name: "Maria"}, {$pull: {hobbies: {title: "Hiking"}}})
+
+// adds a new hobby without allowing duplicate values
+db.users.updateOne({name: "Maria"}, {$addToSet: {hobbies: {title: "Hiking", frequency: 2}}})
+
+// info about executed query
+db.contacts.explain('executionStats').find({"dob.age": {$gt: 60}})
+
+// creates an index for embedded property "dob.age" in ASC order
+db.contacts.createIndex({"dob.age": 1})
+
+// compound index
+db.contacts.createIndex({"dob.age": 1, gender: 1})
+
+// partial index (it will index only persons older than 60)
+db.contacts.createIndex({"dob.age": 1}, {partialFilterExpression: {"dob.age": {$gt: 60}}})
+
+// A text index is a special kind of index. MogoDb will allow you to efficiently search for individual words
+// that compose the indexed text column.
+// They are much powerfull than regular expressions. They are the way to go if you need to look for keywords in text.
+db.products.createIndex({description: "text"})
+
+// Backgroud indexes: when the index is added the affected colleciton is not locked (useful for production dbs).
+
+// create geo-spatial index
+db.places.createIndex({location: "2dsphere"})
+
+// search for locations that are near provided coordinates (with this method you get sorted results based on proximity)
+// (I use 'Piata Rahova' as reference - coords long: 26.06504899803292, lat: 44.40682041341016 and a max distance of 300 meters)
+db.places.find({location: {$near: {$geometry: {type: "Point", coordinates: [26.06504899803292, 44.40682041341016]}, $maxDistance: 300}}})
+[
+  {
+    _id: ObjectId("640ee0c5d61ff033a5548c2a"),
+    name: 'Dan Mitranescu fishing store',
+    location: {
+      type: 'Point',
+      coordinates: [ 26.065000893051277, 44.407393805148594 ]
+    }
+  },
+  {
+    _id: ObjectId("640ed6f1d61ff033a5548c29"),
+    name: 'Dumbrava Noua, Nr. 2',
+    location: {
+      type: 'Point',
+      coordinates: [ 26.06213075458943, 44.40741824654001 ]
+    }
+  }
+]
+
+// search locations within an area (in my case, defined as a rectangle)
+// topRightCorner appears 2 times because we need to close the polygon
+awesomeplaces> const topRightCorner = [26.06607896630709, 44.40777847637328]
+awesomeplaces> const topLeftCorner = [26.059287612999256, 44.408912802632905]
+awesomeplaces> const bottomLeftCorner = [26.05832201774222, 44.40656748216973]
+awesomeplaces> const bottomRightCorner = [26.061605041616147, 44.40492723485598]
+db.places.find({location: {
+	$geoWithin: {$geometry: {type: "Polygon", coordinates: [[topRightCorner, topLeftCorner, bottomLeftCorner, bottomRightCorner, topRightCorner]]}}
+}})
+
+// searches for areas that intersect with a given point (ie: a pair of coords is inside of an area) and returns all matching areas
+db.areas.find({area: {$geoIntersects: {$geometry: {type: "Point", coordinates: [26.06169087230566, 44.40654448836637]}}}})
+[
+  {
+    _id: ObjectId("640ee7d9d61ff033a5548c2c"),
+    name: 'Piata Rahova',
+    area: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [ 26.06607896630709, 44.40777847637328 ],
+          [ 26.059287612999256, 44.408912802632905 ],
+          [ 26.05832201774222, 44.40656748216973 ],
+          [ 26.061605041616147, 44.40492723485598 ],
+          [ 26.06607896630709, 44.40777847637328 ]
+        ]
+      ]
+    }
+  }
+]
+
+// search for locations that are near provided coordinates (with this method you get unsorted results)
+// We provide the center pf the sphere, 0.4 is the distance in kilometers (so 400 meters) and '/ 6378.1/ is used for conversion from km.
+db.places.find({location: {$geoWithin: {$centerSphere: [[26.06504899803292, 44.40682041341016], 0.4 / 6378.1]}}})
+
+// AGGREGATION FRAMEWORK
+// for female persons, group them by state and count the number of females per state
+db.persons.aggregate([
+		{$match: {gender: "female"}},
+		{$group: {_id: {state: "$location.state"}, totalPersons: {$sum: 1}}}
+	])
+Result:
+[
+  { _id: { state: 'oxfordshire' }, totalPersons: 3 },
+  { _id: { state: 'maine-et-loire' }, totalPersons: 3 }
+  ...
+]
+
+// for each person extract only gender + a new property, fullName, defined as concatenation of first and last name
+ db.persons.aggregate([
+... {$project: {_id: 0, gender: 1, fullName: {$concat: ["$name.first", " ", "$name.last"]}}}
+... ])
+
+
+// groups for each age an array of hobbies done by persons of that age group
+// unwind: if a friend has multiple hobbies, it creates multiple copies of that friend document (one for each hobby)
+// ex: for Manuel.hobbies = ["Cooking", "Sports"] => will create 2 objects: Manuel with "Cooking", Manuel with "Sports".
+// after unwind, "Cooking" and "Sports" are not an array anymore, but a property.
+// If we don't want duplicate hobbies, we can use $addToSet instead of $push.
+db.friends.aggregate([
+... {$unwind: "$hobbies"},
+... {$group: {_id: {age: "$age"}, allHobies: {$push: "$hobbies"}}}
+... ])
+[
+  {
+    _id: { age: 29 },
+    allHobies: [ 'Sports', 'Cooking', 'Cooking', 'Skiing' ]
+  },
+  { _id: { age: 30 }, allHobies: [ 'Eating', 'Data Analytics' ] }
+]
+
+// For each friend, keep only exam scores that have a score gt 60. "sc" is a temporary variable used for iteration overriden
+// the "examScores" embedded array. "$$sc" gives us access to that temp variable.
+db.friends.aggregate([
+	{$project: {_id: "$name", examScores: {$filter: {input: "$examScores", as: "sc", cond: {$gt: ["$$sc.score", 60]}}}}}
+])
