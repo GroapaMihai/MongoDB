@@ -257,3 +257,62 @@ db.friends.aggregate([
 db.friends.aggregate([
 	{$project: {_id: "$name", examScores: {$filter: {input: "$examScores", as: "sc", cond: {$gt: ["$$sc.score", 60]}}}}}
 ])
+
+// Obtains the max exam score for each friend
+db.friends.aggregate([ { $project: { _id: "$name", maxExamScore: { $max: "$examScores.score" } } }])
+
+// Groups friends by age category and shows some statistics for each age group
+// ex: Max, Maria are between 18 and 30 years old
+db.friends.aggregate([
+	{$bucket: {groupBy: "$age", boundaries: [0, 18, 30, 50, 80, 120], output: {
+		names: {$push: "$name"},
+		numPersons: {$sum: 1},
+		averageAge: {$avg: "$age"}
+	}}}
+])
+[
+  { _id: 18, names: [ 'Max', 'Maria' ], numPersons: 2, averageAge: 29 },
+  { _id: 30, names: [ 'Manu' ], numPersons: 1, averageAge: 30 }
+]
+
+// Some sort of pagination system: fetch male persons, order them by birthdate ASC, skip the first page (10 records), limit to 10 records
+db.persons.aggregate([
+	{$match: {gender: "male"}},
+	{$project: {fullName: {$concat: ["$name.first", " ", "$name.last"]}, birthdate: {$toDate: "$dob.date"}}},
+	{$sort: {birthdate: 1}},
+	{$skip: 10},
+	{$limit: 10}
+])
+
+// Problem with double decimal approximation
+db.bankAccounts.insertOne({username: "mihai.groapa", a: 0.3, b: 0.1})
+// Instead of receiveing exactly 0.2 as a result, we get a wrong value due to the decimal approximation
+// used to store a and b (they are stored as normal double values, in memory looking smth like: 0.3000000000002)
+db.bankAccounts.aggregate([ { $project: { result: { $subtract: ["$a", "$b"] } } }])
+[
+  {
+    _id: ObjectId("6416c47a129fda84f3a56fdb"),
+    result: 0.19999999999999998
+  }
+]
+
+// Correct way to do it (high precision double values)
+db.bankAccounts.insertOne({username: "mihai.groapa", a: NumberDecimal("0.3"), b: NumberDecimal("0.1")})
+db.bankAccounts.aggregate([ { $project: { result: { $subtract: ["$a", "$b"] } } }])
+[
+  {
+    _id: ObjectId("6416c858129fda84f3a56fdc"),
+    result: Decimal128("0.2")
+  }
+]
+
+// create a user with all rights
+db.createUser({user: "mihai", pwd: "mihai", roles: ["userAdminAnyDatabase"]})
+
+// starting a mongo server in SSL encrypted mode (Run as Administrator)
+// file 'mongodb.pem' was generated with OpenSSL and it's the concatenation of a public and private key
+C:\Program Files\MongoDB\Server\6.0\bin>mongod.exe --sslMode requireSSL --sslPEMKeyFile "C:\Program Files\OpenSSL-Win64\bin\mongodb.pem"
+	--dbpath "C:\Program Files\MongoDB\Server\6.0\data"
+	
+// connecting a client to the mongo server that uses SSL
+C:\Program Files\MongoDB\mongosh-1.7.1-win32-x64\bin>mongosh.exe --ssl --sslCAFile "C:\Program Files\OpenSSL-Win64\bin\mongodb.pem" --host localhost
