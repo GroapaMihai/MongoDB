@@ -316,3 +316,8 @@ C:\Program Files\MongoDB\Server\6.0\bin>mongod.exe --sslMode requireSSL --sslPEM
 	
 // connecting a client to the mongo server that uses SSL
 C:\Program Files\MongoDB\mongosh-1.7.1-win32-x64\bin>mongosh.exe --ssl --sslCAFile "C:\Program Files\OpenSSL-Win64\bin\mongodb.pem" --host localhost
+
+// Mongo Shell to Driver
+// To start the app built with node.js and react, use the following 2 commands in 2 separate terminal windows:
+// 1. npm install; npm start
+// 2. npm run start:server
